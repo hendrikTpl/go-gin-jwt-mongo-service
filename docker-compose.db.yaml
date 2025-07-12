@@ -1,0 +1,40 @@
+version: '3.8'
+services:
+  mongodb:
+    image: mongo
+    restart: always
+    ports:
+      - 27018:27017
+    command: mongod --auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: hendrik
+      MONGO_INITDB_ROOT_PASSWORD: ht-go-mongo-password
+      MONGO_INITDB_DATABASE: ht-go-db
+      MONGODB_DATA_DIR: /data/db
+      MONDODB_LOG_DIR: /dev/null
+    volumes:
+      - mongodbdata:/data/db
+    networks:
+      - ht-go-net
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8083:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: hendrik
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ht-go-mongo-password
+      ME_CONFIG_MONGODB_URL: mongodb://hendrik:ht-go-mongo-password@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin
+    networks:
+      - ht-go-net
+  
+volumes:
+  mongodbdata:
+    driver: local
+
+networks:
+  ht-go-net:
+    name: ht-go-net

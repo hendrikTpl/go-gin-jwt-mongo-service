@@ -27,15 +27,18 @@ func SignUp(c *gin.Context) {
 		return
 	}
 
-	// Validate user input based on struct tags
 	if err := validate.Struct(user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed", "details": err.Error()})
+		var messages []string
+		for _, fieldErr := range err.(validator.ValidationErrors) {
+			messages = append(messages, fieldErr.Error())
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed", "details": messages})
 		return
 	}
 
 	collection := db.GetCollection("users")
 
-	// Check if email already exists
+	// Check if existing email 
 	count, err := collection.CountDocuments(context.Background(), bson.M{"email": user.Email})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing user"})
@@ -46,7 +49,18 @@ func SignUp(c *gin.Context) {
 		return
 	}
 
-	// Hash password before saving
+	// Check if existing username
+	count, err = collection.CountDocuments(context.Background(), bson.M{"username": *user.Username})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check username"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "Username already taken"})
+		return
+	}
+
+	// Hash password
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*user.Password), bcrypt.DefaultCost)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
@@ -55,12 +69,10 @@ func SignUp(c *gin.Context) {
 	user.Password = new(string)
 	*user.Password = string(hashedPassword)
 
-	// Add timestamps and ID
 	user.ID = primitive.NewObjectID()
 	user.CreatedAt = time.Now()
 	user.UpdatedAt = time.Now()
 
-	// Insert user into DB
 	_, err = collection.InsertOne(context.Background(), user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
@@ -79,20 +91,32 @@ func Login(c *gin.Context) {
 
 	var user models.User
 	collection := db.GetCollection("users")
-	err := collection.FindOne(context.Background(), bson.M{"email": input.Email}).Decode(&user)
+	
+	// allow username or email
+	filter := bson.M{}
+	if input.Email != nil {
+		filter["email"] = *input.Email
+	} else if input.Username != nil {
+		filter["username"] = *input.Username
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Email or username is required"})
+		return
+	}
+
+	// err := collection.FindOne(context.Background(), bson.M{"email": input.Email}).Decode(&user)
+	err := collection.FindOne(context.Background(), filter).Decode(&user)
+
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// Compare hashed password
 	err = bcrypt.CompareHashAndPassword([]byte(*user.Password), []byte(*input.Password))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// Create JWT token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"email": *user.Email,
 		"exp":   time.Now().Add(time.Hour * 72).Unix(),

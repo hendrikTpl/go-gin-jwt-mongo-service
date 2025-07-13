@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	"github.com/hendrikTpl/go-gin-jwt-mongo-service/db"
 	"github.com/hendrikTpl/go-gin-jwt-mongo-service/routes"
 )
 
@@ -14,6 +16,8 @@ func main() {
 	if port == "" {
 		port = "5000"
 	}
+
+	db.ConnectDB()
 
 	router := gin.New()
 	router.Use(gin.Logger())
